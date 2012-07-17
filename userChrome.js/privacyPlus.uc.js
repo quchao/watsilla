@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name           Privacy Plus
 // @namespace      http://www.quchao.com/entry/privacy-plus
-// @author         Chappell
+// @author         Qū Chāo <chappell.wat#gmail.com>
 // @include        main
-// @version        1.0
+// @version        1.0.0
 // @compatibility  Firefox 13
 // ==/UserScript==
 
@@ -16,7 +16,7 @@
         const BLACKLIST = [
             'google.com',
             'baidu.com',
-       ];
+        ];
         const PURGE_TIME = 900000; // in millisec
 
         // XPCOM shortcuts
