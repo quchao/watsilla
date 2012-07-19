@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bindings xmlns="http://www.mozilla.org/xbl">
+    <!-- Flash Block Lite -->
+        <binding id="flashBlockLite">
+            <implementation>
+                <constructor><![CDATA[
+                // ==UserContent==
+                // @name          Flash Block Lite
+                // @namespace     Watsilla
+                // @description   Let you enable a blocked Flash by double click.
+                // @copyright     2010+, Qū Chāo (http://quchao.com) <chappell.wat#gmail.com>
+                // @license       GPL v3; http://www.gnu.org/copyleft/gpl.htm 
+                // @include       *
+                // @require       userContent.css
+                // @compatibility Firefox 1.5.0 14.0.*
+                // @homepage      http://quchao.com/entry/how-to-write-a-flashblock-with-xbl/
+                // @updateURL     https://raw.github.com/QuChao/Watsilla/master/userContent.css/flashBlockLite.xml
+                // @version       1.2.0
+                // ==/UserContent==
+                // @version       1.2.0 @ 2012.06.11: Updated whitelist to support for wildcards in the rule.
+                // @version       1.1.0 @ 2012.02.21: Added a simple whitelist; fixed some minor bugs and adjusted the UI.
+                // @version       1.0.0 @ 2010.09.30: Initialize release.
+
+                /*
+                   @configuration
+                */
+                // document whitelist
+                const DOC_WHITELIST = [
+                        'http://g.top100.cn/*', // google music
+                ];
+
+                // flash whitelist
+                const FLASH_WHITELIST = [
+                        'http://*/ZeroClipboard.swf', // zero clipboard
+                ];
+
+                // size limit
+                const MIN_SIZE_LIMIT = {
+                        'width'  : 16,
+                        'height' : 16
+                };
+
+                // flag name
+                const FLAG_NAME = 'flash-blocked';
+
+
+                // shortcuts
+                var win = window,
+                        doc = win.document,
+                        docBody = doc.body,
+                        flashObj = this;
+
+                // create a pattern for the whitelist, simply grabbed from the GreaseMonkey
+                var createPattern = function (urlArr) {
+                        return urlArr.map(function(url) {
+                            url = url.toLowerCase().trim();
+                            url = url.replace(/([()[\]{}|+.,^$?\\])/g, '\\$1');
+                            url = url.replace(/\*+/g, '.*');
+                            url = url.replace(/^\.\*\:?\/\//, 'https?://');
+                            url = url.replace(/^\.\*/, 'https?:.*');
+                            return '^' + url + '$';
+                        }).join('|');
+                };
+
+                // flag check for the doc
+                if (docBody.hasAttribute(FLAG_NAME)) {
+                        // it's in the whitelist
+                        if ('false' === docBody.getAttribute(FLAG_NAME)) {
+                                return;
+                        }
+                } else {
+                        // doc url filter
+                        if (DOC_WHITELIST.length) {
+                                // create a whitelist pattern
+                                let whiteListPattern = createPattern(DOC_WHITELIST);
+
+                                // test it
+                                let isInWhiteList = (new RegExp(whiteListPattern)).test(doc.URL);
+
+                                // set block flag
+                                docBody.setAttribute(FLAG_NAME, isInWhiteList ? 'false' : 'true');
+
+                                // stop here
+                                if (isInWhiteList) {
+                                        return;
+                                }
+                        }
+                }
+
+                // flag check for the flash object
+                if (flashObj.hasAttribute(FLAG_NAME)) {
+                        return;
+                }
+
+                // skip the fake ones
+                var realFlashObj = null;
+                if (realFlashObj = flashObj.querySelector('object,embed')) {
+                        flashObj.parentNode.replaceChild(realFlashObj, flashObj);
+                        flashObj = null;
+                        return;
+                }
+                realFlashObj = null;
+
+                // flash url filter
+                if (FLASH_WHITELIST.length) {
+                        // try to get the url of the flash object
+                        let getFlashObjUrl = function () {
+                                let flashUrl = '',
+                                        flashTagName = flashObj.tagName.toLowerCase();
+                                switch (true) {
+                                        case 'object' === flashTagName && 'data' in flashObj:
+                                                flashUrl = flashObj.data;
+                                                break;
+                                        case 'embed' === flashTagName && 'src' in flashObj:
+                                                flashUrl = flashObj.src;
+                                                break;
+                                        defalt:
+                                                return flashUrl;
+                                }
+                                return flashUrl.toLowerCase().trim();
+                        };
+
+                        // get flash url
+                        let flashUrl = getFlashObjUrl();
+                        if (flashUrl) {
+                                // create a whitelist pattern
+                                let whiteListPattern = createPattern(FLASH_WHITELIST);
+
+                                // test it
+                                let isInWhiteList = (new RegExp(whiteListPattern)).test(flashUrl);
+
+                                // stop here
+                                if (isInWhiteList) {
+                                        return;
+                                }
+                        }
+                }
+
+                 // get size
+                var getWH = function (attr) {
+                        let val = flashObj['offset' + ('width' === attr ? 'Width' : 'Height')],
+                                unit = 'px';
+                        if (0 === val) {
+                                val = win.getComputedStyle(flashObj, null)['width'];
+                                -1 < val.indexOf('px') && MIN_SIZE_LIMIT[attr] > parseInt(val, 10) && (val = MIN_SIZE_LIMIT[attr] + unit);
+                        } else {
+                                MIN_SIZE_LIMIT[attr] > val && (val = MIN_SIZE_LIMIT[attr]);
+                                val = val.toString() + unit;
+                        }
+                        return val;
+                };
+                var flashW = getWH('width'),
+                        flashH = getWH('height');
+
+                // shrink bg img (original: 86x86)
+                var isBgShrunken = false;
+                if ((-1 < flashH.indexOf('px') && 86 > parseInt(flashH, 10)) || (-1 < flashW.indexOf('px') && 86 > parseInt(flashW, 10))) {
+                        isBgShrunken = true;
+                }
+
+                // hide it
+                flashObj.style.display = 'none';
+
+                // create a placeholder
+                var placeHolder = doc.createElement('flash-block');
+                flashObj.parentNode.insertBefore(placeHolder, flashObj);
+                //placeHolder.appendChild(doc.createTextNode('Enable this flash'));
+                placeHolder.title = 'Click to enable this flash';
+                placeHolder.style.cssText = 'display: inline-block; overflow: hidden; text-align: center; cursor: pointer; background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFYAAABWCAMAAABiiJHFAAAAb1BMVEX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F92dnZaWlpUVFQzMzMpKSkWFhYFBQUAAAD%2F%2F%2F%2B%2Bvr6zs7OqqqqhoaGGhob%2F%2F%2F%2Fe3t7V1dXMzMzFxcX%2F%2F%2F%2Fv7%2B%2Fe3t7%2F%2F%2F%2F4%2BPj%2F%2F%2F%2F4%2BPj%2F%2F%2F%2F%2F%2F%2F8SNl5AAAAAJHRSTlMAESIzRFVmd4iIiIiIiIiIiJmZmZmZmaqqqqqqu7u7zMzd3e5%2FRnThAAACf0lEQVR42rVZ23aCMBBUoIpKTCjWSxEE4f%2B%2FsW5IFY4kLGlnXrwAc4bN7CbZLBZMLMMoCpeLf0Owjk%2FXujWor6d4HfyVM4yfhH3UcejPGaVNa0WTRl6kqwFnUxVlWVTD%2F1azST9e0bwct0IqAym2x8vr2se817%2BZ56p8p0awyytzw40fivDaPXLPEmVFkt27u67M0VuZyB2kckIeTKRZIU470nyvJrHPO%2BJ0Opm6AJRCsSDKLhAT6RfoQa63io1t94Qz8SL9UpVQMyC0KRqHIyL9RmepZkGe9WNW3kBrzdRsZFqvJQ5LilKzUR7YkKB6fNy0B7xYH7zaD1a%2FZsoTmcW%2FOrfOyhvn0XwLtbOkP63UPgtHAluP%2BPXzi%2B3f%2Bj282rFjufXdFgk3397dS%2FW1VKO0bcMVTPXhNpgLyLHCQttyBQtyb3%2B%2BoLDkykrLFZzTAA3N1ewdtEzB%2B2ZgMvp1UE5anuAD3di3wV1O0LIEy3vPDKkja7%2F764IvVg6nvRgkDFqG4OQVBcrbSrFopwVXzwyOre56p50UTB6Ln6bdsWknBO9%2BrRvQF8WnnRBMImn6WT8%2BL7NonYIvj%2BtrE9rjPFqX4KMJ7slSEp20dsFUHk%2BmgIvZtFbBwhRzirH0oLUIlsYKdIPyobUIppx9LDpcOTZBOyqY8mypU7fwpR0TXOj0jWyzGI%2F2XXCpayOIFhQE0JCBDIZKB1DygkoNqDCCyjho0gFNkagJHbT8AC2WUEs70EIUtGxGLfJBWxLUBgq03UNtTkFbadTGH9SmQDVVUC0gVMMK1F5DNQNRrUtUoxXVFkY1sWEtd9QBAeo4A3b4Ajsqgh1swY7hcIeGvkecP2db4ailmvhhAAAAAElFTkSuQmCC) no-repeat scroll 50% 50% transparent; ' + (isBgShrunken ? ' -moz-background-size: contain; background-size: contain; ' : '') + 'width: ' + flashW + '; height: ' + flashH + ';';
+
+                // click to play
+                placeHolder.addEventListener('dblclick', function(evt) {
+                        // remove the listener
+                        placeHolder.removeEventListener('dblclick', arguments.callee, false);
+
+                        // remove the placeholder
+                        placeHolder.parentNode.removeChild(placeHolder);
+
+                        // restore the flash
+                        flashObj.style.display = 'block';
+
+                        // remove the flag
+                        flashObj.removeAttribute(FLAG_NAME);
+
+                        // cleaning
+                        placeHolder = null;
+                        flashObj = null;
+                }, false);
+
+                // set block flag
+                flashObj.setAttribute(FLAG_NAME, 'true');
+            ]]></constructor>
+        </implementation>
+    </binding>
+</bindings>

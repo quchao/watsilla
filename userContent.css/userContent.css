@@ -1,0 +1,62 @@
+/*
+ * Edit this file and copy it as userContent.css into your
+ * profile-directory/chrome/
+ */
+
+/*
+ * This file can be used to apply a style to all web pages you view
+ * Rules without !important are overruled by author rules if the
+ * author sets any.  Rules with !important overrule author rules.
+ */
+
+/*
+ * example: turn off "blink" element blinking
+ *
+ * blink { text-decoration: none ! important; }
+ *
+ */
+
+/*
+ * example: give all tables a 2px border
+ *
+ * table { border: 2px solid; }
+ */
+
+/*
+ * example: turn off "marquee" element
+ *
+ * marquee { -moz-binding: none; }
+ *
+ */
+ 
+/* 
+ * For more examples see http://www.mozilla.org/unix/customizing.html
+ */
+
+/* 
+ * ==UserContent==
+ * @name          Flash Block Lite
+ * @namespace     Watsilla
+ * @description   Let you enable a blocked Flash by double click.
+ * @copyright     2010+, Qū Chāo (http://quchao.com) <chappell.wat#gmail.com>
+ * @license       GPL v3; http://www.gnu.org/copyleft/gpl.htm 
+ * @include       *
+ * @require       flashBlockLite.xml
+ * @compatibility Firefox 1.5.0 14.0.*
+ * @homepage      http://quchao.com/entry/how-to-write-a-flashblock-with-xbl/
+ * @updateURL     https://raw.github.com/QuChao/Watsilla/master/userContent.css/userContent.css
+ * @version       1.2.0
+ * ==/UserContent==
+ * @version       1.2.0 @ 2012.06.11: Updated whitelist to support for wildcards in the rule.
+ * @version       1.1.0 @ 2012.02.21: Added a simple whitelist; fixed some minor bugs and adjusted the UI.
+ * @version       1.0.0 @ 2010.09.30: Initialize release.
+ */
+object[classid*=":D27CDB6E-AE6D-11cf-96B8-444553540000"],
+object[codebase*="swflash.cab"],
+object[data*=".swf"],
+embed[type="application/x-shockwave-flash"],
+embed[src*=".swf"],
+object[type="application/x-shockwave-flash"],
+object[src*=".swf"] {
+    -moz-binding: url("flashBlockLite.xml#flashBlockLite");
+}
