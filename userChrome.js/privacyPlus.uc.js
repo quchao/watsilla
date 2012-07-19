@@ -1,11 +1,16 @@
 // ==UserScript==
-// @name           Privacy Plus
-// @namespace      http://www.quchao.com/entry/privacy-plus
-// @author         Qū Chāo <chappell.wat#gmail.com>
-// @include        main
-// @version        1.0.0
-// @compatibility  Firefox 13
+// @name          Privacy Plus
+// @namespace     Watsilla
+// @description   To remove the history of the blacklisted hosts periodically.
+// @copyright     2012+, Qū Chāo (http://quchao.com) <chappell.wat#gmail.com>
+// @license       GPL v3; http://www.gnu.org/copyleft/gpl.htm 
+// @include       main
+// @compatibility Firefox 13.0.0 14.0.*
+// @homepage      http://quchao.com/entry/privacy-plus/
+// @updateURL     https://raw.github.com/QuChao/Watsilla/master/userChrome.js/privacyPlus.uc.js
+// @version       1.0.0
 // ==/UserScript==
+// @version       1.0.0 @ 2012.07.18: Initialize release.
 
 (function() {
 
