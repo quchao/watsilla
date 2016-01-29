@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Specilink Remastered
 // @namespace    Watsilla
-// @version      0.2.1
+// @version      0.2.2
 // @description  Register 115, Thunder, QQ & MiWifi as a handler for magnet, ed2k, thunder, flashget && qqdl pseudo-protocols.
 // @author       Chao QU
 // @match        http://115.com/?tab=offline&mode=wangpan*
@@ -26,6 +26,7 @@
 // @homepage     http://quchao.com/entry/specilink-remastered
 // downloadURL   https://github.com/QuChao/Watsilla/raw/master/userScripts/specilinkRemastered.user.js
 // ==/UserScript==
+// @version      0.2.2 @ 2015-01-29: Fix issues that auto-add-task feature is not working in thunder & miwifi.
 // @version      0.2.1 @ 2015-01-29: Add ed2k, thunder, flashget & qqdl to the supported pseudo-protocol list.
 // @version      0.2.0 @ 2015-12-04: Add Thunder, QQ & MiWifi as handler services.
 // @version      0.1.0 @ 2015-12-03: Initialize release.
@@ -44,7 +45,7 @@ var Configs = {
     'enabled_handler'       : 'thunder', // options: 115, thunder, qq, miwifi
     'auto_add_task'         : true,  // or just paste the link instead
     'auto_add_task_timeout' : 10000, // in msec
-    'debug_mode'            : true,
+    'debug_mode'            : false,
 };
 
 // Debug Func
@@ -83,6 +84,11 @@ var HandlerHelper = (function () {
             // delete the cache
             GM_deleteValue('specilink');
 
+            // check if it needs a helper
+            if (true !== Configs.auto_add_task) {
+                return;
+            }
+
             // run the helper
             debug('Observing Mutations.');
             var helperObserver = this.options.newTaskHelper({
@@ -106,7 +112,7 @@ var HandlerHelper = (function () {
     Helper.defaultOptions = {
         'handlerUrl': '',
         'helperUrl': '',
-        'needBase64Encode': false,
+        'base64Encode': false,
         'supportedProtocols': [],
         'newTaskHelper': emptyFunc,
     };
@@ -222,7 +228,6 @@ var SpeciLinkHandler = (function ($doc) {
                     'newTaskHelper': function (res) {
                         // this maybe handy, however thunder/ed2k/flashget/qqdl don't belong to the scheme whitelist
                         // navigator.registerProtocolHandler('magnet', 'http://115.com/?tab=offline&mode=wangpan&download=%s', '115');
-
                         var newTaskHandler = function (summaries) {
                             var summary = summaries[0];
                             if (0 === summary['added'].length) {
@@ -240,7 +245,9 @@ var SpeciLinkHandler = (function ($doc) {
                             newTaskContainer.querySelector('#js_offline_new_add').value = res.link;
 
                             // do add the task
-                            newTaskContainer.querySelector('a[data-btn="start"]').click();
+                            setTimeout(function () {
+                                newTaskContainer.querySelector('a[data-btn="start"]').click();
+                            }, 0)
                         };
 
                         // create an watcher instance
@@ -275,7 +282,7 @@ var SpeciLinkHandler = (function ($doc) {
                             observer.disconnect();
 
                             // do add the task
-                            //summary.attributeChanged['disabled'][0].click();
+                            summary.attributeChanged['disabled'][0].click();
                         };
 
                         // create an watcher instance
