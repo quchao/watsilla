@@ -1,19 +1,24 @@
 // ==UserScript==
 // @name         Specilink Remastered
 // @namespace    Watsilla
-// @version      0.2.2
-// @description  Register 115, Thunder, QQ & MiWifi as a handler for magnet, ed2k, thunder, flashget && qqdl pseudo-protocols.
+// @version      0.2.3
+// @description  Register 115, Thunder, QQ & MiWifi as a handler for magnet, ed2k, thunder, flashget & qqdl pseudo-protocols.
 // @author       Chao QU
 // @match        http://115.com/?tab=offline&mode=wangpan*
 // @match        http://dynamic.cloud.vip.xunlei.com/user_task*
 // @match        http://cloud.vip.xunlei.com/folders/lx3_task.html*
 // @match        http://lixian.qq.com/main.html*
 // @match        https://d.miwifi.com/d2r/*
+// @match        https://thepiratebay.uk.net/*
+// @match        https://kat.cr/*
 // @match        https://btdigg.org/search*
+// @match        http://btdigg.org/search*
 // @match        http://btsearch.net/*
-// @match        http://cili007.com/*
+// @match        http://cili008.com/*
 // @match        http://www.ed2000.com/ShowFile/*
 // @match        http://www.hd1080.cn/*
+// @match        http://www.torrentkitty.tld/*
+// @match        http://www.zimuzu.tv/*
 // @encoding     utf-8
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -30,7 +35,8 @@
 // @version      0.2.1 @ 2015-01-29: Add ed2k, thunder, flashget & qqdl to the supported pseudo-protocol list.
 // @version      0.2.0 @ 2015-12-04: Add Thunder, QQ & MiWifi as handler services.
 // @version      0.1.0 @ 2015-12-03: Initialize release.
-/* jshint esnext: true */
+/* jshint -W097 */
+'use strict';
 
 /*
  * @Todo:
@@ -38,6 +44,7 @@
  * 2. add specilink converter
  * 3. add a helper for miwifi
  * 4. register protocols
+ * 5. using GM_registerMenuCommand to switch to the default handler
  */
 
 // Configs
@@ -54,8 +61,6 @@ var debug = Configs.debug_mode ? console.debug.bind(console) : emptyFunc;
 
 // Handler Helper
 var HandlerHelper = (function () {
-    "use strict";
-
     // constructor
     function Helper(options) {
         // alias
@@ -163,8 +168,6 @@ var HandlerHelper = (function () {
 
 // SpeciLink Handler
 var SpeciLinkHandler = (function ($doc) {
-    'use strict';
-
     // privates
     var handlerHelper = null;
 
