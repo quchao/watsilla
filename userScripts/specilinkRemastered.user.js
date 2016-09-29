@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Specilink Remastered
 // @namespace    Watsilla
-// @version      0.2.3
+// @version      0.3.0
 // @description  Register 115, Thunder, QQ & MiWifi as a handler for magnet, ed2k, thunder, flashget & qqdl pseudo-protocols.
 // @author       Chao QU
-// @match        http://115.com/?tab=offline&mode=wangpan*
+// @match        http://115.com/?tab=offline*
 // @match        http://dynamic.cloud.vip.xunlei.com/user_task*
 // @match        http://cloud.vip.xunlei.com/folders/lx3_task.html*
 // @match        http://lixian.qq.com/main.html*
@@ -19,6 +19,10 @@
 // @match        http://www.hd1080.cn/*
 // @match        http://www.torrentkitty.tld/*
 // @match        http://www.zimuzu.tv/*
+// @match        http://www.1080time.com/*
+// @match        http://www.cililian.com/*
+// @match        http://www.utorrentmui.com/*
+// @match        http://seedpeer.eu/*
 // @encoding     utf-8
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -31,74 +35,94 @@
 // @homepage     http://quchao.com/entry/specilink-remastered
 // downloadURL   https://github.com/QuChao/Watsilla/raw/master/userScripts/specilinkRemastered.user.js
 // ==/UserScript==
-// @version      0.2.2 @ 2015-01-29: Fix issues that auto-add-task feature is not working in thunder & miwifi.
-// @version      0.2.1 @ 2015-01-29: Add ed2k, thunder, flashget & qqdl to the supported pseudo-protocol list.
-// @version      0.2.0 @ 2015-12-04: Add Thunder, QQ & MiWifi as handler services.
+// @version      0.3.0 @ 2016-09-28: Download services can be registered as handlers, only magnet is allowed for now.
+// @version      0.2.3 @ 2016-03-21: More resource sites are added by default.
+// @version      0.2.2 @ 2016-01-29: Fix issues that auto-add-task feature is not working in thunder & miwifi.
+// @version      0.2.1 @ 2016-01-29: Add ed2k, thunder, flashget & qqdl to the supported pseudo-protocol list.
+// @version      0.2.0 @ 2015-12-04: Add Thunder, QQ & MiWifi as download services.
 // @version      0.1.0 @ 2015-12-03: Initialize release.
 /* jshint -W097 */
 'use strict';
-
-/*
- * @Todo:
- * 1. take a specilink in text format as a link
- * 2. add specilink converter
- * 3. add a helper for miwifi
- * 4. register protocols
- * 5. using GM_registerMenuCommand to switch to the default handler
- */
 
 // Configs
 var Configs = {
     'enabled_handler'       : 'thunder', // options: 115, thunder, qq, miwifi
     'auto_add_task'         : true,  // or just paste the link instead
     'auto_add_task_timeout' : 10000, // in msec
+    'register_protocols'    : false, // go & check chrome://settings/handlers
     'debug_mode'            : false,
 };
+
+// Vars
+var specilinkFlag = 'ref=specilink&';
 
 // Debug Func
 var emptyFunc = function() {};
 var debug = Configs.debug_mode ? console.debug.bind(console) : emptyFunc;
 
 // Handler Helper
-var HandlerHelper = (function () {
+var HandlerHelper = (function ($win, $doc) {
     // constructor
     function Helper(options) {
         // alias
         var _this = this;
 
+        // options
         this.options = Helper.validateOptions(options);
-        this.getAvailableProtocols = function () {
-            return [
-                'magnet',
-                'ed2k',
-                'thunder',
-                'qqdl',
-                'flashget'
-            ];
-        };
 
-        // check the speciLink from datastore
-        var speciLink = GM_getValue('specilink');
-        if (undefined === speciLink) {
-            // no speciLink at all, just stop here
-            debug('No specilink found from upstream.');
-            /*} else if (this.options.helperUrls.some(function (item) {
-             return 0 === document.URL.indexOf(item);
-             })) {*/
-        } else if (0 === document.URL.indexOf(this.options.helperUrl)) {
-            // delete the cache
-            GM_deleteValue('specilink');
+        // check if it's in the handler
+        if (0 === $doc.URL.indexOf(this.options.handlerEntry)) {
+            // for thunder only, pt.1
+            if ('thunder' === Configs.enabled_handler) {
+                // try to update the user id
+                var thunderUserId = /; userid=(\d+);/.exec($doc.cookie);
+                if (null !== thunderUserId) {
+                    GM_setValue('thunder_user_id', thunderUserId[1]);
+                } else {
+                    GM_deleteValue('thunder_user_id');
+                }
+            }
+
+            // check if it's needed to register protocols
+            if (true === Configs.register_protocols) {
+                // https://developers.google.com/web/updates/2011/06/Registering-a-custom-protocol-handler?hl=en
+                // however thunder/ed2k/flashget/qqdl don't belong to the scheme whitelist
+                GM_setValue('protocols_registered', 1);
+                try {
+                    $win.navigator.registerProtocolHandler('magnet', this.getHandledBase() + '%s', $doc.title);
+                } catch (e) {
+                    GM_deleteValue('protocols_registered');
+                    debug(e);
+                }
+            } else if (GM_getValue('protocols_registered')) {
+                GM_deleteValue('protocols_registered');
+            }
 
             // check if it needs a helper
             if (true !== Configs.auto_add_task) {
                 return;
             }
 
+            // check the speciLink from the url
+            var speciLinkPos = $doc.URL.indexOf(specilinkFlag);
+            if (-1 === speciLinkPos) {
+                // no speciLink at all, just stop here
+                debug('No specilink found from upstream.');
+                return;
+            }
+
+            // for thunder only, pt.2
+            if ('thunder' === Configs.enabled_handler && undefined === GM_getValue('thunder_user_id')) {
+                var specilink = /&furl=([^&]+)/.exec(location.search);
+                if (null !== specilink) {
+                    $doc.location.replace(this.options.handlerBase + specilink[1]);
+                }
+                return;
+            }
+
             // run the helper
             debug('Observing Mutations.');
-            var helperObserver = this.options.newTaskHelper({
-                'link': speciLink
-            });
+            var helperObserver = this.options.newTaskHelper();
 
             // stop the helper after timeout
             setTimeout(function () {
@@ -115,8 +139,9 @@ var HandlerHelper = (function () {
 
     // static
     Helper.defaultOptions = {
-        'handlerUrl': '',
-        'helperUrl': '',
+        'handlerBase': '',
+        'altHandlerBase': '',
+        'handlerEntry': '',
         'base64Encode': false,
         'supportedProtocols': [],
         'newTaskHelper': emptyFunc,
@@ -140,34 +165,59 @@ var HandlerHelper = (function () {
         // merge the options
         return Object.assign({}, Helper.defaultOptions, options);
     };
+    Helper.getUpdatedThunderHandlerUrl = function (url) {
+        if (undefined !== GM_getValue('thunder_user_id')) {
+            url = url.replace(specilinkFlag, specilinkFlag + 'userid=' + GM_getValue('thunder_user_id') + '&');
+        }
+        return url;
+    };
 
+    // methods
+    Helper.prototype.getHandledBase = function () {
+        if ('thunder' === Configs.enabled_handler && undefined !== GM_getValue('thunder_user_id')) {
+            return Helper.getUpdatedThunderHandlerUrl(this.options.altHandlerBase);
+        } else {
+            return this.options.handlerBase;
+        }
+    };
     Helper.prototype.getHandledUrl = function (link) {
         // need to be base64-encoded?
         if (true === this.options.base64Encode) {
-            link = window.btoa(link);
+            link = $win.btoa(link);
         }
 
-        return this.options.handlerUrl + encodeURIComponent(link);
+        return this.getHandledBase() + encodeURIComponent(link);
     };
-    Helper.prototype.getSelectors = function () {
-        var availableProtocols = this.getAvailableProtocols();
-
+    Helper.prototype.getSupportedProtocols = function () {
         // find out enabled & available protocols
+        var availableProtocols = [
+            'magnet',
+            'ed2k',
+            'thunder',
+            'qqdl',
+            'flashget'
+        ];
         this.options.supportedProtocols = this.options.supportedProtocols.filter(function (protocol) {
             return -1 !== availableProtocols.indexOf(protocol);
         });
 
+        return this.options.supportedProtocols;
+    };
+    Helper.prototype.getSelectors = function () {
         // combine the selectors
-        return this.options.supportedProtocols.map(function(protocol){
+        return this.getSupportedProtocols().filter(function (protocol) {
+            // only magnet is registerable for now
+            return false === Configs.register_protocols || 'magnet' !== protocol || undefined === GM_getValue('protocols_registered');
+        }).map(function(protocol){
             return 'a[href^="' + protocol + ':"]';
         }).join(',');
     };
 
     return Helper;
-})();
+})(unsafeWindow, unsafeWindow.document);
 
 // SpeciLink Handler
-var SpeciLinkHandler = (function ($doc) {
+var SpeciLinkHandler = (function ($win, $doc) {
     // privates
     var handlerHelper = null;
 
@@ -198,13 +248,9 @@ var SpeciLinkHandler = (function ($doc) {
         // get the event target
         var target = evt.currentTarget;
 
-        // save the speciLink to the GM storage
-        GM_setValue('specilink', target.getAttribute('specilink'));
-        // @todo: remove the value after timeout?
-
         // pass it to the handler
         var handlerUrl = handlerHelper.getHandledUrl(target.getAttribute('specilink'));
-        'function' === typeof GM_openInTab ? GM_openInTab(handlerUrl) : window.open(handlerUrl);
+        'function' === typeof GM_openInTab ? GM_openInTab(handlerUrl) : $win.open(handlerUrl);
     }
 
     // handle links
@@ -225,12 +271,10 @@ var SpeciLinkHandler = (function ($doc) {
             // 115 Cloud by default
             case '115':
                 handlerHelper = new HandlerHelper({
-                    'handlerUrl': 'http://115.com/?tab=offline&mode=wangpan&ref=specilink&download=',
-                    'helperUrl': 'http://115.com/?tab=offline&ref=specilink&download=',
+                    'handlerBase': 'http://115.com/?tab=offline&mode=wangpan&' + specilinkFlag + 'download=',
+                    'handlerEntry': 'http://115.com/?tab=offline',
                     'supportedProtocols': ['magnet', 'ed2k', 'thunder'],
-                    'newTaskHelper': function (res) {
-                        // this maybe handy, however thunder/ed2k/flashget/qqdl don't belong to the scheme whitelist
-                        // navigator.registerProtocolHandler('magnet', 'http://115.com/?tab=offline&mode=wangpan&download=%s', '115');
+                    'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
                             var summary = summaries[0];
                             if (0 === summary['added'].length) {
@@ -245,12 +289,12 @@ var SpeciLinkHandler = (function ($doc) {
                             var newTaskContainer = summary['added'][0];
 
                             // yeah, it's duplicated, but it'll make it be handled faster
-                            newTaskContainer.querySelector('#js_offline_new_add').value = res.link;
+                            //newTaskContainer.querySelector('#js_offline_new_add').value = res.link;
 
                             // do add the task
                             setTimeout(function () {
                                 newTaskContainer.querySelector('a[data-btn="start"]').click();
-                            }, 0)
+                            }, 1000);
                         };
 
                         // create an watcher instance
@@ -270,10 +314,11 @@ var SpeciLinkHandler = (function ($doc) {
             // Thunder Cloud ('XunLei Lixian')
             case 'thunder':
                 handlerHelper = new HandlerHelper({
-                    'handlerUrl': 'http://lixian.vip.xunlei.com/lixian_login.html?ref=specilink&furl=',
-                    'helperUrl': 'http://dynamic.cloud.vip.xunlei.com/user_task',
+                    'handlerBase': 'http://lixian.vip.xunlei.com/lixian_login.html?' + specilinkFlag + 'furl=',
+                    'altHandlerBase': 'http://dynamic.cloud.vip.xunlei.com/user_task?' + specilinkFlag + 'furl=',
+                    'handlerEntry': 'http://dynamic.cloud.vip.xunlei.com/user_task',
                     'supportedProtocols': ['magnet', 'ed2k', 'thunder', 'qqdl', 'flashget'],
-                    'newTaskHelper': function (res) {
+                    'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
                             var summary = summaries[0];
                             if (0 === summary.attributeChanged['disabled'].length) {
@@ -306,10 +351,10 @@ var SpeciLinkHandler = (function ($doc) {
             // QQ Lixian
             case 'qq':
                 handlerHelper = new HandlerHelper({
-                    'handlerUrl': 'http://lixian.qq.com/main.html?ref=specilink&url=',
-                    'helperUrl': 'http://lixian.qq.com/main.html?ref=specilink&url=',
+                    'handlerBase': 'http://lixian.qq.com/main.html?' + specilinkFlag + 'url=',
+                    'handlerEntry': 'http://lixian.qq.com/main.html',
                     'supportedProtocols': ['magnet', 'ed2k', 'qqdl'],
-                    'newTaskHelper': function (res) {
+                    'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
                             var summary = summaries[0];
                             if (0 === summary.attributeChanged['style'].length) {
@@ -346,10 +391,10 @@ var SpeciLinkHandler = (function ($doc) {
             // MiWifi ('XiaoMi Remote Downloader')
             case 'miwifi':
                 handlerHelper = new HandlerHelper({
-                    'handlerUrl': 'https://d.miwifi.com/d2r/?ref=specilink&url=',
+                    'handlerBase': 'https://d.miwifi.com/d2r/?' + specilinkFlag + 'url=',
+                    'handlerEntry': 'https://d.miwifi.com/d2r/',
                     'base64Encode': true,
-                    'supportedProtocols': ['magnet', 'ed2k', 'thunder'],
-                    'newTaskHelper': emptyFunc,
+                    'supportedProtocols': ['magnet', 'ed2k', 'thunder']
                 });
                 break;
 
@@ -366,7 +411,7 @@ var SpeciLinkHandler = (function ($doc) {
         // public
         init : _init
     };
-})(unsafeWindow.document);
+})(unsafeWindow, unsafeWindow.document);
 
 // fire
 SpeciLinkHandler.init();
