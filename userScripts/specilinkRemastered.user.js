@@ -1,27 +1,23 @@
 // ==UserScript==
 // @name         Specilink Remastered
 // @namespace    Watsilla
-// @version      0.3.0
+// @version      0.3.1
 // @description  Register 115, Thunder, QQ & MiWifi as a handler for magnet, ed2k, thunder, flashget & qqdl pseudo-protocols.
 // @author       Chao QU
-// @match        http://115.com/?tab=offline*
+// @match        *://115.com/?tab=offline*
 // @match        http://dynamic.cloud.vip.xunlei.com/user_task*
 // @match        http://cloud.vip.xunlei.com/folders/lx3_task.html*
 // @match        http://lixian.qq.com/main.html*
 // @match        https://d.miwifi.com/d2r/*
 // @match        https://thepiratebay.uk.net/*
-// @match        https://kat.cr/*
-// @match        https://btdigg.org/search*
-// @match        http://btdigg.org/search*
-// @match        http://btsearch.net/*
-// @match        http://cili008.com/*
+// @match        https://kickass.cd/*
 // @match        http://www.ed2000.com/ShowFile/*
 // @match        http://www.hd1080.cn/*
-// @match        http://www.torrentkitty.tld/*
+// @match        https://www.torrentkitty.tld/*
 // @match        http://www.zimuzu.tv/*
 // @match        http://www.1080time.com/*
 // @match        http://www.cililian.com/*
-// @match        http://www.utorrentmui.com/*
+// @match        https://www.utorrentmui.com/*
 // @match        http://seedpeer.eu/*
 // @encoding     utf-8
 // @grant        GM_setValue
@@ -32,9 +28,10 @@
 // @require      https://raw.githubusercontent.com/rafaelw/mutation-summary/master/src/mutation-summary.js
 // @run-at       document-end
 // @license      MIT
-// @homepage     http://quchao.com/entry/specilink-remastered
+// @homepage     https://quchao.com/entry/specilink-remastered
 // downloadURL   https://github.com/QuChao/Watsilla/raw/master/userScripts/specilinkRemastered.user.js
 // ==/UserScript==
+// @version      0.3.1 @ 2017-03-08: Upgrade to https for handlers if possible, and set 115 as the default handler.
 // @version      0.3.0 @ 2016-09-28: Download services can be registered as handlers, only magnet is allowed for now.
 // @version      0.2.3 @ 2016-03-21: More resource sites are added by default.
 // @version      0.2.2 @ 2016-01-29: Fix issues that auto-add-task feature is not working in thunder & miwifi.
@@ -46,7 +43,7 @@
 
 // Configs
 var Configs = {
-    'enabled_handler'       : 'thunder', // options: 115, thunder, qq, miwifi
+    'enabled_handler'       : '115', // options: 115, thunder, qq, miwifi
     'auto_add_task'         : true,  // or just paste the link instead
     'auto_add_task_timeout' : 10000, // in msec
     'register_protocols'    : false, // go & check chrome://settings/handlers
@@ -71,7 +68,7 @@ var HandlerHelper = (function ($win, $doc) {
         this.options = Helper.validateOptions(options);
 
         // check if it's in the handler
-        if (0 === $doc.URL.indexOf(this.options.handlerEntry)) {
+        if (true === this.options.handlerEntry.test($doc.URL)) {
             // for thunder only, pt.1
             if ('thunder' === Configs.enabled_handler) {
                 // try to update the user id
@@ -141,7 +138,7 @@ var HandlerHelper = (function ($win, $doc) {
     Helper.defaultOptions = {
         'handlerBase': '',
         'altHandlerBase': '',
-        'handlerEntry': '',
+        'handlerEntry': new RegExp(),
         'base64Encode': false,
         'supportedProtocols': [],
         'newTaskHelper': emptyFunc,
@@ -271,8 +268,8 @@ var SpeciLinkHandler = (function ($win, $doc) {
             // 115 Cloud by default
             case '115':
                 handlerHelper = new HandlerHelper({
-                    'handlerBase': 'http://115.com/?tab=offline&mode=wangpan&' + specilinkFlag + 'download=',
-                    'handlerEntry': 'http://115.com/?tab=offline',
+                    'handlerBase': 'https://115.com/?tab=offline&mode=wangpan&' + specilinkFlag + 'download=',
+                    'handlerEntry': /^https?:\/\/115\.com\/\?tab=offline/,
                     'supportedProtocols': ['magnet', 'ed2k', 'thunder'],
                     'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
@@ -316,7 +313,7 @@ var SpeciLinkHandler = (function ($win, $doc) {
                 handlerHelper = new HandlerHelper({
                     'handlerBase': 'http://lixian.vip.xunlei.com/lixian_login.html?' + specilinkFlag + 'furl=',
                     'altHandlerBase': 'http://dynamic.cloud.vip.xunlei.com/user_task?' + specilinkFlag + 'furl=',
-                    'handlerEntry': 'http://dynamic.cloud.vip.xunlei.com/user_task',
+                    'handlerEntry': /^https?:\/\/dynamic\.cloud\.vip\.xunlei\.com\/user_task/,
                     'supportedProtocols': ['magnet', 'ed2k', 'thunder', 'qqdl', 'flashget'],
                     'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
@@ -352,7 +349,7 @@ var SpeciLinkHandler = (function ($win, $doc) {
             case 'qq':
                 handlerHelper = new HandlerHelper({
                     'handlerBase': 'http://lixian.qq.com/main.html?' + specilinkFlag + 'url=',
-                    'handlerEntry': 'http://lixian.qq.com/main.html',
+                    'handlerEntry': /^http:\/\/lixian\.qq\.com\/main\.html/,
                     'supportedProtocols': ['magnet', 'ed2k', 'qqdl'],
                     'newTaskHelper': function () {
                         var newTaskHandler = function (summaries) {
@@ -392,7 +389,7 @@ var SpeciLinkHandler = (function ($win, $doc) {
             case 'miwifi':
                 handlerHelper = new HandlerHelper({
                     'handlerBase': 'https://d.miwifi.com/d2r/?' + specilinkFlag + 'url=',
-                    'handlerEntry': 'https://d.miwifi.com/d2r/',
+                    'handlerEntry': /^https:\/\/d\.miwifi\.com\/d2r/,
                     'base64Encode': true,
                     'supportedProtocols': ['magnet', 'ed2k', 'thunder']
                 });
