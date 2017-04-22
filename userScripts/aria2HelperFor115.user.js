@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aria2 Helper for 115
 // @namespace    Watsilla
-// @version      0.1.0
+// @version      0.1.1
 // @description  Add 115 download links to Aria2 via RPC
 // @author       Chao QU
 // @match        *://115.com/?ct=file*
