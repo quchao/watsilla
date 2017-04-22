@@ -16,7 +16,8 @@
 // @homepage     https://quchao.com/entry/aira2-helper-for-115
 // downloadURL   https://github.com/QuChao/Watsilla/raw/master/userScripts/aria2HelperFor115.user.js
 // ==/UserScript==
-// @version      0.1.0 @ 2015-12-03: Initialize release.
+// @version      0.1.0 @ 2017-04-21: Initialize release.
+// @version      0.1.1 @ 2017-04-22: One could still copy download link when failed to send it to Aria2.
 /* jshint -W097 */
 'use strict';
 
@@ -159,8 +160,10 @@ let QueueManager = (function ($win, $doc) {
         this.errMsgs.push("\t" + 'File Info: ' + JSON.stringify(this.queue[idx]));
         this.errMsgs.push("\t" + 'HTTP Status: ' + resp.status + ' - ' + resp.statusText);
         if ('responseText' in resp) {
-            let err = JSON.parse(resp.responseText).error;
-            this.errMsgs.push("\t" + 'Err Msg: ' + err.code + ' - ' + err.message);
+            try {
+                let err = JSON.parse(resp.responseText).error;
+                this.errMsgs.push("\t" + 'Err Msg: ' + err.code + ' - ' + err.message);
+            } catch (e) {}
         }
 
         // update the status
@@ -259,18 +262,18 @@ let QueueManager = (function ($win, $doc) {
             } else {
                 msg.push('所选 ' +queueSize + ' 项已处理完毕：');
 
-                if (0 < report.finished) {
-                    if (!this.options.copyOnly) {
-                        msg.push((queueSize === report.finished ? ' 全部均' : '其中 ' + report.finished + ' 项') + '已发送至 Aria2 进行下载。');
+                if (!this.options.copyOnly) {
+                    if (0 < report.finished) {
+                            msg.push((queueSize === report.finished ? '全部' : '其中 ' + report.finished + ' 项') + '成功发送至 Aria2 进行下载。');
+                    } else {
+                        msg.push((0 === report.undownloadable ? '全部' : '其中 ' + (queueSize - report.undownloadable) + ' 项') + '发送至 Aria2 失败。');
                     }
+                }
 
-                    if (this.options.copyOnly || Configs.sync_clipboard) {
-                        // sync to clipboard
-                        GM_setClipboard(report.links.join("\n"));
-                        msg.push('下载地址已同步至剪贴板。');
-                    }
-                } else {
-                    msg.push('其中 ' + (queueSize - report.undownloadable) + ' 项发送至 Aria2 失败。');
+                if (this.options.copyOnly || Configs.sync_clipboard) {
+                    // sync to clipboard
+                    GM_setClipboard(report.links.join("\n"));
+                    msg.push('下载地址已同步至剪贴板。');
                 }
 
                 if (0 < report.undownloadable) {
