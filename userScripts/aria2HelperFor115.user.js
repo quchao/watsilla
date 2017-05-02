@@ -1,8 +1,10 @@
 // ==UserScript==
 // @name         Aria2 Helper for 115
+// @name:zh-CN   115 网盘 Aria2 助手
 // @namespace    Watsilla
-// @version      0.1.1
+// @version      0.1.2
 // @description  Add 115 download links to Aria2 via RPC
+// @description:zh-CN 直接将所选 115 下载链接发送至 Aria2
 // @author       Chao QU
 // @match        *://115.com/?ct=file*
 // @encoding     utf-8
@@ -18,17 +20,20 @@
 // ==/UserScript==
 // @version      0.1.0 @ 2017-04-21: Initialize release.
 // @version      0.1.1 @ 2017-04-22: One could still copy download link when failed to send it to Aria2.
+// @version      0.1.2 @ 2017-04-24: Add comments on configuration items.
+// @inspiredBy   https://greasyfork.org/en/scripts/7749-115-download-helper
+// @inspiredBy   https://github.com/robbielj/chrome-aria2-integration
 /* jshint -W097 */
 'use strict';
 
 // Configs
 let Configs = {
-    'debug_mode'    : false,
-    "sync_clipboard": true,
-    'use_http'      : false,
-    "rpc_path"      : 'http://localhost:6800/jsonrpc',
-    "rpc_user"      : '',
-    "rpc_token"     : ''
+    'debug_mode'    : false, // 是否开启调试模式
+    "sync_clipboard": true,  // 是否将下载链接同步到剪贴板
+    'use_http'      : false, // 115 下载链接是否从 https 转换为 http （老版本 Aria2 需要）
+    "rpc_path"      : 'http://localhost:6800/jsonrpc', // RPC 地址
+    "rpc_user"      : '',    // RPC 用户名（若设置密码，请填写至 token 项）
+    "rpc_token"     : ''     // RPC Token ，v1.18.4+ 支持，与用户名认证方式互斥
 };
 
 // Debug Func
@@ -50,7 +55,7 @@ let Aria2RPC = (function ($win, $doc) {
         let reqParams = {
             'jsonrpc': '2.0',
             'method' : 'aria2.addUri',
-            'id'     : +getTS(),
+            'id'     : getTS(),
             'params' : []
         };
 
@@ -119,11 +124,11 @@ let QueueManager = (function ($win, $doc) {
         // build the queue
         this.queue = Array.from(selectedNodes).map(function (node) {
             return {
-                'name' : node.getAttribute('title'),
-                'code' : node.getAttribute('pick_code'),
-                'link' : null,
+                'name'  : node.getAttribute('title'),
+                'code'  : node.getAttribute('pick_code'),
+                'link'  : null,
                 // -3: , -2: failed to fetch link, -1: failed to download, 0: unfinished, 1: sent to aria2
-                'status' : '1' === node.getAttribute('file_type') ? STATUS_UNFINISHED : STATUS_UNDOWNLOADABLE
+                'status': '1' === node.getAttribute('file_type') ? STATUS_UNFINISHED : STATUS_UNDOWNLOADABLE
             };
         }, this);
     }
@@ -163,7 +168,8 @@ let QueueManager = (function ($win, $doc) {
             try {
                 let err = JSON.parse(resp.responseText).error;
                 this.errMsgs.push("\t" + 'Err Msg: ' + err.code + ' - ' + err.message);
-            } catch (e) {}
+            } catch (e) {
+            }
         }
 
         // update the status
@@ -187,8 +193,8 @@ let QueueManager = (function ($win, $doc) {
         if (!this.options.copyOnly) {
             Aria2RPC.add(this.queue[idx].link,
                 {
-                   'referer': $doc.URL,
-                   'header' : 'Cookie:' + $doc.cookie // @todo: http cookie?
+                    'referer': $doc.URL,
+                    'header' : 'Cookie:' + $doc.cookie // @todo: http cookie?
                 },
                 this.downloadHandler.bind(this, idx),
                 this.errorHandler.bind(this, STATUS_DOWNLOAD_FAILURE, idx)
@@ -250,8 +256,8 @@ let QueueManager = (function ($win, $doc) {
 
                 return accumulator;
             }, {
-                'links' : [],
-                'finished' : 0,
+                'links'         : [],
+                'finished'      : 0,
                 'undownloadable': 0
             });
 
@@ -260,11 +266,11 @@ let QueueManager = (function ($win, $doc) {
             if (queueSize === report.undownloadable) {
                 msg.push('所选 ' + queueSize + ' 项类型均为目录，暂不支持。');
             } else {
-                msg.push('所选 ' +queueSize + ' 项已处理完毕：');
+                msg.push('所选 ' + queueSize + ' 项已处理完毕：');
 
                 if (!this.options.copyOnly) {
                     if (0 < report.finished) {
-                            msg.push((queueSize === report.finished ? '全部' : '其中 ' + report.finished + ' 项') + '成功发送至 Aria2 进行下载。');
+                        msg.push((queueSize === report.finished ? '全部' : '其中 ' + report.finished + ' 项') + '成功发送至 Aria2 进行下载。');
                     } else {
                         msg.push((0 === report.undownloadable ? '全部' : '其中 ' + (queueSize - report.undownloadable) + ' 项') + '发送至 Aria2 失败。');
                     }
