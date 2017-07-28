@@ -2,7 +2,7 @@
 // @name         Aria2 Helper for 115
 // @name:zh-CN   115 网盘 Aria2 助手
 // @namespace    Watsilla
-// @version      0.1.2
+// @version      0.1.3
 // @description  Add 115 download links to Aria2 via RPC
 // @description:zh-CN 直接将所选 115 下载链接发送至 Aria2
 // @author       Chao QU
@@ -21,6 +21,7 @@
 // @version      0.1.0 @ 2017-04-21: Initialize release.
 // @version      0.1.1 @ 2017-04-22: One could still copy download link when failed to send it to Aria2.
 // @version      0.1.2 @ 2017-04-24: Add comments on configuration items.
+// @version      0.1.3 @ 2017-07-28: Fix download link fetching & copying issue on non-Chrome explorers.
 // @inspiredBy   https://greasyfork.org/en/scripts/7749-115-download-helper
 // @inspiredBy   https://github.com/robbielj/chrome-aria2-integration
 /* jshint -W097 */
@@ -29,7 +30,7 @@
 // Configs
 let Configs = {
     'debug_mode'    : false, // 是否开启调试模式
-    "sync_clipboard": true,  // 是否将下载链接同步到剪贴板
+    "sync_clipboard": true,  // 是否将下载链接同步到剪贴板，部分浏览器（如 Safari ）不支持
     'use_http'      : false, // 115 下载链接是否从 https 转换为 http （老版本 Aria2 需要）
     "rpc_path"      : 'http://localhost:6800/jsonrpc', // RPC 地址
     "rpc_user"      : '',    // RPC 用户名（若设置密码，请填写至 token 项）
@@ -37,11 +38,7 @@ let Configs = {
 };
 
 // Debug Func
-let debug = Configs.debug_mode ? GM_log : function () {
-};
-let getTS = function () {
-    return (+new Date()).toString();
-};
+let debug = Configs.debug_mode ? GM_log : function () {};
 
 // Aria2RPC
 let Aria2RPC = (function ($win, $doc) {
@@ -55,7 +52,7 @@ let Aria2RPC = (function ($win, $doc) {
         let reqParams = {
             'jsonrpc': '2.0',
             'method' : 'aria2.addUri',
-            'id'     : getTS(),
+            'id'     : (+new Date()).toString(),
             'params' : []
         };
 
@@ -86,7 +83,7 @@ let Aria2RPC = (function ($win, $doc) {
             // send to aria2, @todo: support metalink?
             GM_xmlhttpRequest({
                 method : 'POST',
-                url    : Configs.rpc_path + '?tm=' + getTS(),
+                url    : Configs.rpc_path,
                 headers: rpcHeaders,
                 data   : JSON.stringify(reqParams),
                 onload : loadHandler,
@@ -164,13 +161,20 @@ let QueueManager = (function ($win, $doc) {
         this.errMsgs.push('File #' + idx + ': ');
         this.errMsgs.push("\t" + 'File Info: ' + JSON.stringify(this.queue[idx]));
         this.errMsgs.push("\t" + 'HTTP Status: ' + resp.status + ' - ' + resp.statusText);
+
+        let errMsg = 'Unknown';
         if ('responseText' in resp) {
             try {
-                let err = JSON.parse(resp.responseText).error;
-                this.errMsgs.push("\t" + 'Err Msg: ' + err.code + ' - ' + err.message);
+                let err = JSON.parse(resp.responseText);
+                errMsg = err.error.message;
             } catch (e) {
+                errMsg = e;
             }
+        } else if ('msg' in resp) {
+            errMsg = resp.msg;
         }
+
+        this.errMsgs.push("\t" + 'Err Msg:' + errMsg);
 
         // update the status
         this.queue[idx].status = errCode;
@@ -208,12 +212,11 @@ let QueueManager = (function ($win, $doc) {
     Queue.prototype.fetchLinkHandler = function (idx, resp) {
         debug(resp);
 
-        let res = JSON.parse(resp.responseText);
-        if ('file_url' in res) {
+        if ('file_url' in resp) {
             // update the link
             this.queue[idx].link = Configs.use_http
-                ? res.file_url.replace('https://', 'http://') // http only?
-                : res.file_url;
+                ? resp.file_url.replace('https://', 'http://') // http only?
+                : resp.file_url;
             this.next();
         } else {
             this.errorHandler.call(this, STATUS_LINK_FETCH_FAILURE, idx, resp);
@@ -221,16 +224,14 @@ let QueueManager = (function ($win, $doc) {
     };
     Queue.prototype.fetchLink = function (idx) {
         // get the download link first
-        GM_xmlhttpRequest({
-            method : 'GET',
-            url    : 'http://web.api.115.com/files/download?pickcode=' + this.queue[idx].code + '&_=' + getTS(),
-            headers: {
-                'Referer': 'http://web.api.115.com/bridge_2.0.html?namespace=Core.DataAccess&api=UDataAPI&_t=v5',
-                'Accept' : '*/*'
-            },
-            onload : this.fetchLinkHandler.bind(this, idx),
-            onerror: this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
-        });
+        $win.top.UA$.ajax({
+            url      : 'files/download?pickcode=' + this.queue[idx].code,
+            type     : 'GET',
+            dataType : 'json',
+            cache    : false,
+            success  : this.fetchLinkHandler.bind(this, idx),
+            error    : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
+        })
     };
     Queue.prototype.next = function () {
         // check if it's the queue is empty
@@ -277,9 +278,14 @@ let QueueManager = (function ($win, $doc) {
                 }
 
                 if (this.options.copyOnly || Configs.sync_clipboard) {
-                    // sync to clipboard
-                    GM_setClipboard(report.links.join("\n"));
-                    msg.push('下载地址已同步至剪贴板。');
+                    let downloadLinks = report.links.join("\n");
+                    if (false === /\sSafari\/\d+\.\d+\.\d+/.test($win.navigator.userAgent)) {
+                        // sync to clipboard
+                        GM_setClipboard(downloadLinks, 'text');
+                        msg.push('下载地址已同步至剪贴板。');
+                    } else if (this.options.copyOnly) {
+                        prompt('本浏览器不支持访问剪贴板，请手动全选复制', downloadLinks);
+                    }
                 }
 
                 if (0 < report.undownloadable) {
