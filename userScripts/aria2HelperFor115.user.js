@@ -2,7 +2,7 @@
 // @name         Aria2 Helper for 115
 // @name:zh-CN   115 网盘 Aria2 助手
 // @namespace    Watsilla
-// @version      0.1.3
+// @version      0.1.4
 // @description  Add 115 download links to Aria2 via RPC
 // @description:zh-CN 直接将所选 115 下载链接发送至 Aria2
 // @author       Chao QU
