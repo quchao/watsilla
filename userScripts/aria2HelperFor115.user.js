@@ -22,6 +22,7 @@
 // @version      0.1.1 @ 2017-04-22: One could still copy download link when failed to send it to Aria2.
 // @version      0.1.2 @ 2017-04-24: Add comments on configuration items.
 // @version      0.1.3 @ 2017-07-28: Fix download link fetching & copying issue on non-Chrome explorers.
+// @version      0.1.4 @ 2017-10-18: Fix an issue that a batch task only sends the first file to Aria2.
 // @inspiredBy   https://greasyfork.org/en/scripts/7749-115-download-helper
 // @inspiredBy   https://github.com/robbielj/chrome-aria2-integration
 /* jshint -W097 */
@@ -39,6 +40,7 @@ let Configs = {
 
 // Debug Func
 let debug = Configs.debug_mode ? GM_log : function () {};
+let emptyFunc = function () {};
 
 // Aria2RPC
 let Aria2RPC = (function ($win, $doc) {
@@ -49,25 +51,31 @@ let Aria2RPC = (function ($win, $doc) {
         let rpcHeaders = {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
         };
-        let reqParams = {
-            'jsonrpc': '2.0',
-            'method' : 'aria2.addUri',
-            'id'     : (+new Date()).toString(),
-            'params' : []
-        };
 
-        // auth method
+        // auth method, pt.1
         if ('' !== Configs.rpc_user) {
             // user/password
             rpcHeaders['Authorization'] = 'Basic ' + $win.btoa(Configs.rpc_user + ':' + Configs.rpc_token);
-        } else if ('' !== Configs.rpc_token) {
-            // secret, since v1.18.4
-            reqParams.params.unshift('token:' + Configs.rpc_token);
         }
 
         return function (link, options, loadHandler, errorHandler) {
+            // new task
+            let reqParams = {
+                'jsonrpc': '2.0',
+                'method' : 'aria2.addUri',
+                'id'     : (+new Date()).toString(),
+                'params' : []
+            };
+
+            // auth method, pt.2
+            if ('' === Configs.rpc_user && '' !== Configs.rpc_token) {
+                // secret, since v1.18.4
+                reqParams.params.unshift('token:' + Configs.rpc_token);
+            }
+
             // download link
-            if ('undefined' !== typeof options) {
+            if ('undefined' !== typeof link) {
+                // @todo: multiple sources?
                 reqParams.params.push([link]);
             } else {
                 // link is required
@@ -86,8 +94,8 @@ let Aria2RPC = (function ($win, $doc) {
                 url    : Configs.rpc_path,
                 headers: rpcHeaders,
                 data   : JSON.stringify(reqParams),
-                onload : loadHandler,
-                onerror: errorHandler
+                onload : loadHandler || emptyFunc,
+                onerror: errorHandler || emptyFunc
             });
         };
     }
@@ -108,9 +116,9 @@ let QueueManager = (function ($win, $doc) {
     const STATUS_UNDOWNLOADABLE = -3;
 
     // constructor
-    function Queue(options) {
+    function Mgr(options) {
         // options
-        this.options = Queue.validateOptions(options);
+        this.options = Mgr.validateOptions(options);
 
         // err msgs
         this.errMsgs = [];
@@ -131,31 +139,31 @@ let QueueManager = (function ($win, $doc) {
     }
 
     // static
-    Queue.defaultOptions = {
+    Mgr.defaultOptions = {
         'copyOnly': false
     };
-    Queue.validateOptions = function (options) {
+    Mgr.validateOptions = function (options) {
         // validation
         for (let key in options) {
             // skip the inherit ones
             if (!options.hasOwnProperty(key)) {
                 continue;
             }
-            if (!(key in Queue.defaultOptions)) {
+            if (!(key in Mgr.defaultOptions)) {
                 // check existence
                 throw Error('Invalid option: ' + key);
-            } else if (typeof options[key] !== typeof Queue.defaultOptions[key]) {
+            } else if (typeof options[key] !== typeof Mgr.defaultOptions[key]) {
                 // check type
                 throw Error('Invalid option type: ' + key);
             }
         }
 
         // merge the options
-        return Object.assign({}, Queue.defaultOptions, options);
+        return Object.assign({}, Mgr.defaultOptions, options);
     };
 
     // methods
-    Queue.prototype.errorHandler = function (errCode, idx, resp) {
+    Mgr.prototype.errorHandler = function (errCode, idx, resp) {
         debug(resp);
 
         this.errMsgs.push('File #' + idx + ': ');
@@ -180,7 +188,7 @@ let QueueManager = (function ($win, $doc) {
         this.queue[idx].status = errCode;
         this.next();
     };
-    Queue.prototype.downloadHandler = function (idx, resp) {
+    Mgr.prototype.downloadHandler = function (idx, resp) {
         debug(resp);
 
         if (200 === resp.status && 'responseText' in resp) {
@@ -192,7 +200,7 @@ let QueueManager = (function ($win, $doc) {
             this.errorHandler.call(this, STATUS_DOWNLOAD_FAILURE, idx, resp);
         }
     };
-    Queue.prototype.download = function (idx) {
+    Mgr.prototype.download = function (idx) {
         // send to aria2
         if (!this.options.copyOnly) {
             Aria2RPC.add(this.queue[idx].link,
@@ -209,7 +217,7 @@ let QueueManager = (function ($win, $doc) {
             this.next();
         }
     };
-    Queue.prototype.fetchLinkHandler = function (idx, resp) {
+    Mgr.prototype.fetchLinkHandler = function (idx, resp) {
         debug(resp);
 
         if ('file_url' in resp) {
@@ -222,7 +230,7 @@ let QueueManager = (function ($win, $doc) {
             this.errorHandler.call(this, STATUS_LINK_FETCH_FAILURE, idx, resp);
         }
     };
-    Queue.prototype.fetchLink = function (idx) {
+    Mgr.prototype.fetchLink = function (idx) {
         // get the download link first
         $win.top.UA$.ajax({
             url      : 'files/download?pickcode=' + this.queue[idx].code,
@@ -233,7 +241,7 @@ let QueueManager = (function ($win, $doc) {
             error    : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
         })
     };
-    Queue.prototype.next = function () {
+    Mgr.prototype.next = function () {
         // check if it's the queue is empty
         let nextIdx = this.queue.findIndex(function (file) {
             return STATUS_UNFINISHED === file.status;
@@ -300,15 +308,15 @@ let QueueManager = (function ($win, $doc) {
                 throw Error(this.errMsgs.join("\n"));
             }
         } else if (null === this.queue[nextIdx].link) {
-            // fetch link with the code, then download it
+            // fetch link with the code
             this.fetchLink(nextIdx);
         } else {
-            // fetch link with the code, then download it
+            // download it
             this.download(nextIdx);
         }
     };
 
-    return Queue;
+    return Mgr;
 })(unsafeWindow, unsafeWindow.document);
 
 // UI Helper
