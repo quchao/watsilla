@@ -132,6 +132,7 @@ let QueueManager = (function ($win, $doc) {
                 'name'  : node.getAttribute('title'),
                 'code'  : node.getAttribute('pick_code'),
                 'link'  : null,
+				'cookie' : null,
                 // -3: , -2: failed to fetch link, -1: failed to download, 0: unfinished, 1: sent to aria2
                 'status': '1' === node.getAttribute('file_type') ? STATUS_UNFINISHED : STATUS_UNDOWNLOADABLE
             };
@@ -217,14 +218,30 @@ let QueueManager = (function ($win, $doc) {
             this.next();
         }
     };
-    Mgr.prototype.fetchLinkHandler = function (idx, resp) {
-        debug(resp);
+    Mgr.prototype.fetchLinkHandler = function (idx, raw_resp) {
+
+		debug(raw_resp.responseHeaders);
+		let header_arr = raw_resp.responseHeaders.trim().split(/[\r\n]+/);
+		var headerMap = {};
+		header_arr.forEach(function (line) {
+		  var parts = line.split(': ');
+		  var header = parts.shift();
+		  var value = parts.join(': ');
+		  headerMap[header] = value;
+		});
+
+		let set_cookie_string = headerMap["set-cookie"];
+		let final_cookie = set_cookie_string.split(';')[0];
+		debug(final_cookie);
+
+		let resp = JSON.parse(raw_resp.responseText);
 
         if ('file_url' in resp) {
             // update the link
             this.queue[idx].link = Configs.use_http
                 ? resp.file_url.replace('https://', 'http://') // http only?
                 : resp.file_url;
+			this.queue[idx].cookie = final_cookie;
             this.next();
         } else {
             this.errorHandler.call(this, STATUS_LINK_FETCH_FAILURE, idx, resp);
@@ -232,13 +249,14 @@ let QueueManager = (function ($win, $doc) {
     };
     Mgr.prototype.fetchLink = function (idx) {
         // get the download link first
-        $win.top.UA$.ajax({
-            url      : 'files/download?pickcode=' + this.queue[idx].code,
-            type     : 'GET',
-            dataType : 'json',
-            cache    : false,
-            success  : this.fetchLinkHandler.bind(this, idx),
-            error    : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
+        // $win.top.UA$.ajax({
+        debug('http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code);
+		GM_xmlhttpRequest({
+            url      : 'http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code,
+            method   : 'GET',
+            ignoreCache : true,
+            onload   : this.fetchLinkHandler.bind(this, idx),
+            onerror  : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
         })
     };
     Mgr.prototype.next = function () {
