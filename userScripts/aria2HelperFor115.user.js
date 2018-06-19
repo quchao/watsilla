@@ -207,7 +207,7 @@ let QueueManager = (function ($win, $doc) {
             Aria2RPC.add(this.queue[idx].link,
                 {
                     'referer': $doc.URL,
-                    'header' : 'Cookie:' + $doc.cookie // @todo: http cookie?
+                    'header' : ['Cookie: ' + this.queue[idx].cookie, 'User-Agent: ' + $win.navigator.userAgent]
                 },
                 this.downloadHandler.bind(this, idx),
                 this.errorHandler.bind(this, STATUS_DOWNLOAD_FAILURE, idx)
