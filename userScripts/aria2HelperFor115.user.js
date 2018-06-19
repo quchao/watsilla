@@ -2,7 +2,7 @@
 // @name         Aria2 Helper for 115
 // @name:zh-CN   115 网盘 Aria2 助手
 // @namespace    Watsilla
-// @version      0.1.4
+// @version      0.1.5
 // @description  Add 115 download links to Aria2 via RPC
 // @description:zh-CN 直接将所选 115 下载链接发送至 Aria2
 // @author       Chao QU
@@ -23,6 +23,7 @@
 // @version      0.1.2 @ 2017-04-24: Add comments on configuration items.
 // @version      0.1.3 @ 2017-07-28: Fix download link fetching & copying issue on non-Chrome explorers.
 // @version      0.1.4 @ 2017-10-18: Fix an issue that a batch task only sends the first file to Aria2.
+// @version      0.1.5 @ 2018-06-19: New cookie and user-agent auth method is supported now. Fixed by MartianZ <fzyadmin@gmail.com>.
 // @inspiredBy   https://greasyfork.org/en/scripts/7749-115-download-helper
 // @inspiredBy   https://github.com/robbielj/chrome-aria2-integration
 /* jshint -W097 */
