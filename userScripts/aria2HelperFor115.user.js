@@ -2,7 +2,7 @@
 // @name         Aria2 Helper for 115
 // @name:zh-CN   115 网盘 Aria2 助手
 // @namespace    Watsilla
-// @version      0.1.4
+// @version      0.1.5
 // @description  Add 115 download links to Aria2 via RPC
 // @description:zh-CN 直接将所选 115 下载链接发送至 Aria2
 // @author       Chao QU
@@ -23,6 +23,7 @@
 // @version      0.1.2 @ 2017-04-24: Add comments on configuration items.
 // @version      0.1.3 @ 2017-07-28: Fix download link fetching & copying issue on non-Chrome explorers.
 // @version      0.1.4 @ 2017-10-18: Fix an issue that a batch task only sends the first file to Aria2.
+// @version      0.1.5 @ 2018-06-19: New cookie and user-agent auth method is supported now. Fixed by MartianZ <fzyadmin@gmail.com>.
 // @inspiredBy   https://greasyfork.org/en/scripts/7749-115-download-helper
 // @inspiredBy   https://github.com/robbielj/chrome-aria2-integration
 /* jshint -W097 */
@@ -132,6 +133,7 @@ let QueueManager = (function ($win, $doc) {
                 'name'  : node.getAttribute('title'),
                 'code'  : node.getAttribute('pick_code'),
                 'link'  : null,
+				'cookie' : null,
                 // -3: , -2: failed to fetch link, -1: failed to download, 0: unfinished, 1: sent to aria2
                 'status': '1' === node.getAttribute('file_type') ? STATUS_UNFINISHED : STATUS_UNDOWNLOADABLE
             };
@@ -206,7 +208,7 @@ let QueueManager = (function ($win, $doc) {
             Aria2RPC.add(this.queue[idx].link,
                 {
                     'referer': $doc.URL,
-                    'header' : 'Cookie:' + $doc.cookie // @todo: http cookie?
+                    'header' : ['Cookie: ' + this.queue[idx].cookie, 'User-Agent: ' + $win.navigator.userAgent]
                 },
                 this.downloadHandler.bind(this, idx),
                 this.errorHandler.bind(this, STATUS_DOWNLOAD_FAILURE, idx)
@@ -217,14 +219,30 @@ let QueueManager = (function ($win, $doc) {
             this.next();
         }
     };
-    Mgr.prototype.fetchLinkHandler = function (idx, resp) {
-        debug(resp);
+    Mgr.prototype.fetchLinkHandler = function (idx, raw_resp) {
+
+		debug(raw_resp.responseHeaders);
+		let header_arr = raw_resp.responseHeaders.trim().split(/[\r\n]+/);
+		var headerMap = {};
+		header_arr.forEach(function (line) {
+		  var parts = line.split(': ');
+		  var header = parts.shift();
+		  var value = parts.join(': ');
+		  headerMap[header] = value;
+		});
+
+		let set_cookie_string = headerMap["set-cookie"];
+		let final_cookie = set_cookie_string.split(';')[0];
+		debug(final_cookie);
+
+		let resp = JSON.parse(raw_resp.responseText);
 
         if ('file_url' in resp) {
             // update the link
             this.queue[idx].link = Configs.use_http
                 ? resp.file_url.replace('https://', 'http://') // http only?
                 : resp.file_url;
+			this.queue[idx].cookie = final_cookie;
             this.next();
         } else {
             this.errorHandler.call(this, STATUS_LINK_FETCH_FAILURE, idx, resp);
@@ -232,13 +250,14 @@ let QueueManager = (function ($win, $doc) {
     };
     Mgr.prototype.fetchLink = function (idx) {
         // get the download link first
-        $win.top.UA$.ajax({
-            url      : 'files/download?pickcode=' + this.queue[idx].code,
-            type     : 'GET',
-            dataType : 'json',
-            cache    : false,
-            success  : this.fetchLinkHandler.bind(this, idx),
-            error    : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
+        // $win.top.UA$.ajax({
+        debug('http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code);
+		GM_xmlhttpRequest({
+            url      : 'http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code,
+            method   : 'GET',
+            ignoreCache : true,
+            onload   : this.fetchLinkHandler.bind(this, idx),
+            onerror  : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
         })
     };
     Mgr.prototype.next = function () {
