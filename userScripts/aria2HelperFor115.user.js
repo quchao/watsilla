@@ -133,7 +133,7 @@ let QueueManager = (function ($win, $doc) {
                 'name'  : node.getAttribute('title'),
                 'code'  : node.getAttribute('pick_code'),
                 'link'  : null,
-				'cookie' : null,
+                'cookie' : null,
                 // -3: , -2: failed to fetch link, -1: failed to download, 0: unfinished, 1: sent to aria2
                 'status': '1' === node.getAttribute('file_type') ? STATUS_UNFINISHED : STATUS_UNDOWNLOADABLE
             };
@@ -206,13 +206,13 @@ let QueueManager = (function ($win, $doc) {
         // send to aria2
         if (!this.options.copyOnly) {
             Aria2RPC.add(this.queue[idx].link,
-                {
-                    'referer': $doc.URL,
-                    'header' : ['Cookie: ' + this.queue[idx].cookie, 'User-Agent: ' + $win.navigator.userAgent]
-                },
-                this.downloadHandler.bind(this, idx),
-                this.errorHandler.bind(this, STATUS_DOWNLOAD_FAILURE, idx)
-            );
+                         {
+                'referer': $doc.URL,
+                'header' : ['Cookie: ' + this.queue[idx].cookie, 'User-Agent: ' + $win.navigator.userAgent]
+            },
+                         this.downloadHandler.bind(this, idx),
+                         this.errorHandler.bind(this, STATUS_DOWNLOAD_FAILURE, idx)
+                        );
         } else {
             // update the status, @todo: another status code?
             this.queue[idx].status = STATUS_SENT_TO_ARIA2;
@@ -221,30 +221,66 @@ let QueueManager = (function ($win, $doc) {
     };
     Mgr.prototype.fetchLinkHandler = function (idx, raw_resp) {
 
-		debug(raw_resp.responseHeaders);
-		let header_arr = raw_resp.responseHeaders.trim().split(/[\r\n]+/);
-		var headerMap = {};
-		header_arr.forEach(function (line) {
-		  var parts = line.split(': ');
-		  var header = parts.shift();
-		  var value = parts.join(': ');
-		  headerMap[header] = value;
-		});
+        debug(raw_resp.responseHeaders);
+        let header_arr = raw_resp.responseHeaders.trim().split(/[\r\n]+/);
+        var headerMap = {};
+        header_arr.forEach(function (line) {
+            var parts = line.split(': ');
+            var header = parts.shift();
+            var value = parts.join(': ');
+            headerMap[header] = value;
+        });
 
-		let set_cookie_string = headerMap["set-cookie"];
-		let final_cookie = set_cookie_string.split(';')[0];
-		debug(final_cookie);
+        let set_cookie_string = headerMap["set-cookie"];
+        console.info(headerMap);
+        let final_cookie = '';//set_cookie_string.split(';')[0];
+        debug(final_cookie);
 
-		let resp = JSON.parse(raw_resp.responseText);
+        let resp = JSON.parse(raw_resp.responseText);
 
-        if ('file_url' in resp) {
+        if (resp.state) {
             // update the link
             this.queue[idx].link = Configs.use_http
                 ? resp.file_url.replace('https://', 'http://') // http only?
-                : resp.file_url;
-			this.queue[idx].cookie = final_cookie;
+            : resp.file_url;
+            this.queue[idx].cookie = final_cookie;
             this.next();
         } else {
+            console.info('http://proapi.115.com/app/chrome/down?method=get_file_url&pickcode='+resp.pickcode);
+            GM_xmlhttpRequest({
+                url      : 'http://proapi.115.com/app/chrome/down?method=get_file_url&pickcode='+resp.pickcode,
+                method   : 'GET',
+                ignoreCache : true,
+                onload   : this.fetchOriginLink.bind(this, idx),
+                onerror  : this.errorHandler.bind(this, STATUS_LINK_FETCH_FAILURE, idx)
+            })
+        }
+    };
+    Mgr.prototype.fetchOriginLink = function (idx, raw_resp) {
+        debug(raw_resp.responseHeaders);
+        let header_arr = raw_resp.responseHeaders.trim().split(/[\r\n]+/);
+        var headerMap = {};
+        header_arr.forEach(function (line) {
+            var parts = line.split(': ');
+            var header = parts.shift();
+            var value = parts.join(': ');
+            headerMap[header] = value;
+        });
+
+        let set_cookie_string = headerMap["set-cookie"];
+        console.info(headerMap);
+        let final_cookie = '';//set_cookie_string.split(';')[0];
+        debug(final_cookie);
+
+        let resp = JSON.parse(raw_resp.responseText);
+        console.info(resp);
+
+        if (resp.state) {
+            // update the link
+            this.queue[idx].link = Object.values(resp.data)[0].url.url;
+            this.queue[idx].cookie = final_cookie;
+            this.next();
+        }else{
             this.errorHandler.call(this, STATUS_LINK_FETCH_FAILURE, idx, resp);
         }
     };
@@ -252,8 +288,8 @@ let QueueManager = (function ($win, $doc) {
         // get the download link first
         // $win.top.UA$.ajax({
         debug('http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code);
-		GM_xmlhttpRequest({
-            url      : 'http://webapi.115.com/files/download?pickcode=' + this.queue[idx].code,
+        GM_xmlhttpRequest({
+            url      : `http://webapi.115.com/files/download?pickcode=${this.queue[idx].code}&_=${new Date().getTime()}`,
             method   : 'GET',
             ignoreCache : true,
             onload   : this.fetchLinkHandler.bind(this, idx),
@@ -270,13 +306,13 @@ let QueueManager = (function ($win, $doc) {
         if (-1 === nextIdx) {
             let report = this.queue.reduce(function (accumulator, file) {
                 switch (file.status) {
-                    // task finished
+                        // task finished
                     case STATUS_SENT_TO_ARIA2:
                         accumulator.finished += 1;
                     case STATUS_DOWNLOAD_FAILURE:
                         accumulator.links.push(file.link);
                         break;
-                    // task finished
+                        // task finished
                     case STATUS_UNDOWNLOADABLE:
                         accumulator.undownloadable += 1;
                         break;
